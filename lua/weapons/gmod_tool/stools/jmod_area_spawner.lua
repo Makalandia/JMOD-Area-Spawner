@@ -15,6 +15,7 @@ if CLIENT then
     language.Add("tool.jmod_area_spawner.clearobjects", "Удалить все объекты")
     language.Add("tool.jmod_area_spawner.pausespawn", "Приостановить спавн")
     language.Add("tool.jmod_area_spawner.resumespawn", "Продолжить спавн")
+    language.Add("tool.jmod_area_spawner.spawnchance", "Шанс спавна (0%-100%)")
 end
 
 TOOL.ClientConVar["zone"] = "Area1"
@@ -23,6 +24,7 @@ TOOL.ClientConVar["spawninterval"] = "10"
 TOOL.ClientConVar["maxobjects"] = "10"
 TOOL.ClientConVar["spawnobject"] = ""
 TOOL.ClientConVar["npcweapon"] = "weapon_smg1" -- Оружие по умолчанию для НИПов
+TOOL.ClientConVar["spawnchance"] = "100" -- Шанс спавна по умолчанию 100%
 
 TOOL.Point1 = nil
 TOOL.Point2 = nil
@@ -69,6 +71,7 @@ function TOOL:SpawnEntitiesAndMarkers()
     local maxObjects = self:GetClientNumber("maxobjects")
     local spawnObjects = self:GetClientInfo("spawnobject")
     local npcWeapon = self:GetClientInfo("npcweapon")
+    local spawnChance = self:GetClientNumber("spawnchance")
 
     if selectedZone == "Custom zone" and spawnObjects == "" then
         ply:ChatPrint("Please specify objects to spawn in the custom zone!")
@@ -122,7 +125,7 @@ function TOOL:SpawnEntitiesAndMarkers()
     self.SpawnedEntities[zoneEnt] = self.SpawnedEntities[zoneEnt] or {}
 
     -- Спавним объекты внутри зоны
-    self:SpawnObjectsInZone(area, min, max, zoneEnt, maxObjects, spawnObjects, npcWeapon)
+    self:SpawnObjectsInZone(area, min, max, zoneEnt, maxObjects, spawnObjects, npcWeapon, spawnChance)
 
     -- Добавляем таймер для периодического спавна объектов
     local timerName = "JModAreaSpawner_Timer_" .. zoneEnt:EntIndex()
@@ -131,7 +134,7 @@ function TOOL:SpawnEntitiesAndMarkers()
         if not IsValid(zoneEnt) or self.SpawnPaused then
             return
         end
-        self:SpawnObjectsInZone(area, min, max, zoneEnt, maxObjects, spawnObjects, npcWeapon)
+        self:SpawnObjectsInZone(area, min, max, zoneEnt, maxObjects, spawnObjects, npcWeapon, spawnChance)
     end)
 
     -- Добавляем возможность удаления зоны по клавише Z
@@ -141,7 +144,7 @@ function TOOL:SpawnEntitiesAndMarkers()
     undo.Finish()
 end
 
-function TOOL:SpawnObjectsInZone(area, min, max, zoneEnt, maxObjects, spawnObjects, npcWeapon)
+function TOOL:SpawnObjectsInZone(area, min, max, zoneEnt, maxObjects, spawnObjects, npcWeapon, spawnChance)
     -- Удаляем невалидные объекты из таблицы
     self.SpawnedEntities[zoneEnt] = self.SpawnedEntities[zoneEnt] or {}
     for i = #self.SpawnedEntities[zoneEnt], 1, -1 do
@@ -162,7 +165,14 @@ function TOOL:SpawnObjectsInZone(area, min, max, zoneEnt, maxObjects, spawnObjec
             break
         end
 
-        local pos = Vector(math.random(min.x, max.x), math.random(min.y, max.y), math.random(min.z, max.z))
+        -- Проверяем шанс спавна
+        if math.random(100) > spawnChance then
+            -- Пропускаем текущую итерацию, если шанс спавна не выпал
+            goto skip_spawn
+        end
+
+        -- Поднимаем позицию спавна на 50 юнитов вверх
+        local pos = Vector(math.random(min.x, max.x), math.random(min.y, max.y), math.random(min.z, max.z) + 50)
         local angle = Angle(0, math.random(0, 360), 0) -- Случайный угол поворота в плоскости XY
 
         local ent
@@ -198,6 +208,8 @@ function TOOL:SpawnObjectsInZone(area, min, max, zoneEnt, maxObjects, spawnObjec
         else
             print("Failed to create entity of type " .. item)
         end
+
+        ::skip_spawn::
     end
 end
 
@@ -287,6 +299,15 @@ function TOOL.BuildCPanel(CPanel)
         Label = "#tool.jmod_area_spawner.npcweapon",
         Command = "jmod_area_spawner_npcweapon",
         MaxLength = "256",
+    })
+
+    -- Добавляем поле для ввода шанса спавна
+    CPanel:AddControl("Slider", {
+        Label = "#tool.jmod_area_spawner.spawnchance",
+        Command = "jmod_area_spawner_spawnchance",
+        Type = "Int",
+        Min = "0",
+        Max = "100"
     })
 
     -- Добавляем кнопку для удаления всех объектов
